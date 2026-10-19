@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Server Health · Tenable{% endblock %}
+{% block body_class %}server-health-page{% endblock %}
+{% block brand_icon %}
+          <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+          </svg>
+          {% endblock %}
+{% block page_heading %}Server Health{% endblock %}
+{% block page_subtitle %}Last reboot posture · Plugins 56468 (Linux) / 92366 (Windows){% endblock %}
+{% block header_actions %}
+        <button id="refresh-btn" class="btn btn-ghost">
+          <svg id="refresh-icon" class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span id="refresh-label">Refresh</span>
+        </button>
+        {% endblock %}
+{% block main_class %} sh-main{% endblock %}
+{% block content %}
+<div id="error-banner" class="alert alert-error hidden">
+    <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+      <p class="alert-title">Failed to load server health</p>
+      <p id="error-message" class="alert-text"></p>
+    </div>
+  </div>
+
+  <div id="loading-banner" class="alert alert-loading hidden">
+    <svg class="alert-icon spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    <div>
+      <p class="alert-title">Syncing with Tenable</p>
+      <p id="loading-message" class="alert-text">Exporting last-reboot plugins…</p>
+    </div>
+  </div>
+
+  <div id="warning-banner" class="alert alert-warning hidden">
+    <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <div>
+      <p class="alert-title">Notice</p>
+      <p id="warning-message" class="alert-text"></p>
+    </div>
+  </div>
+
+  <div class="sh-pagehead">
+    <div>
+      <h2 class="sh-title">Server Health</h2>
+      <p class="sh-sub">Monitor reboot recency across your server infrastructure.</p>
+    </div>
+  </div>
+
+  <section class="sh-summary" aria-label="Reboot posture summary">
+    <div class="sh-sumrow" id="sumrow"></div>
+    <div class="sh-bar" id="sumbar" aria-hidden="true"></div>
+  </section>
+
+  <section class="sh-os-section" aria-label="Operating system breakdown">
+    <article class="chart-card sh-os-panel">
+      <div class="chart-card-header lumin-card-header">
+        <div>
+          <h3>Operating systems</h3>
+          <p>Server count by OS version · Click a card to filter</p>
+        </div>
+        <span class="lumin-badge" id="os-groups-total">0 versions</span>
+      </div>
+      <div class="sh-os-tiles" id="os-groups"></div>
+    </article>
+  </section>
+
+  <div class="sh-controls">
+    <label class="sh-search">
+      <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
+      <input id="q" type="search" placeholder="Search hostname or IP" autocomplete="off" aria-label="Search hostname or IP">
+    </label>
+    <label class="sh-field">OS
+      <select id="fos"><option value="all">All</option><option value="linux">Linux</option><option value="windows">Windows</option></select>
+    </label>
+    <label class="sh-field">Health
+      <select id="fst">
+        <option value="all">All</option>
+        <option value="healthy">Healthy</option>
+        <option value="attention">Attention</option>
+        <option value="warning">Warning</option>
+        <option value="critical">Critical</option>
+      </select>
+    </label>
+    <label class="sh-field">Sort
+      <select id="fsort">
+        <option value="oldest">Last reboot · oldest first</option>
+        <option value="newest">Last reboot · newest first</option>
+        <option value="name">Server name</option>
+        <option value="status">Status · worst first</option>
+      </select>
+    </label>
+    <button type="button" class="sh-reset hidden" id="reset">Clear filters</button>
+    <div class="sh-count" id="count" aria-live="polite"></div>
+  </div>
+
+  <section class="sh-matrix">
+    <div class="sh-mhead">
+      <div>
+        <h2>Server Health Matrix</h2>
+        <p>Each square represents one server · Click to inspect</p>
+      </div>
+      <div class="sh-legend">
+        <span><i style="background:var(--sh-healthy)"></i>Healthy <em>&lt; 1 day</em></span>
+        <span><i style="background:var(--sh-attention)"></i>Attention <em>1–3 weeks</em></span>
+        <span><i style="background:var(--sh-warning)"></i>Warning <em>3–4 weeks</em></span>
+        <span><i style="background:var(--sh-critical)"></i>Critical <em>&gt; 1 month</em></span>
+      </div>
+    </div>
+    <div class="sh-mbody" id="mbody">
+      <div class="sh-empty" id="empty-state">No server health data yet. Click Refresh to sync from Tenable.</div>
+      <div class="sh-group" id="g-linux">
+        <div class="sh-ghead">
+          <h3>Linux Servers</h3>
+          <span id="count-linux">0 servers</span>
+          <div class="sh-mini" id="mini-linux"></div>
+        </div>
+        <div class="sh-grid" id="grid-linux" style="--cols:30" role="list"></div>
+      </div>
+      <div class="sh-group" id="g-windows">
+        <div class="sh-ghead">
+          <h3>Windows Servers</h3>
+          <span id="count-windows">0 servers</span>
+          <div class="sh-mini" id="mini-windows"></div>
+        </div>
+        <div class="sh-grid" id="grid-windows" style="--cols:20" role="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sh-tablecard" aria-label="Server health list">
+    <div class="sh-mhead">
+      <div>
+        <h2>Server list</h2>
+        <p>Full detail for every host · Click a row to inspect</p>
+      </div>
+      <div class="sh-count" id="table-count" aria-live="polite"></div>
+    </div>
+    <div class="table-scroll sh-table-scroll">
+      <table class="data-table data-table-fixed sh-table" id="sh-table">
+        <thead>
+          <tr>
+            <th class="col-th" data-col="hostname">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="hostname">Hostname <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="hostname" aria-label="Filter Hostname"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="ip">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="ip">IP <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="ip" aria-label="Filter IP"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="os">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="os">OS <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="os" aria-label="Filter OS"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="status">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="status">Status <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="status" aria-label="Filter Status"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="lastReboot">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="lastReboot">Last reboot <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="lastReboot" aria-label="Filter Last reboot"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="age">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="age">Age <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="age" aria-label="Filter Age"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="plugin">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="plugin">Plugin <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="plugin" aria-label="Filter Plugin"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+            <th class="col-th" data-col="lastFound">
+              <div class="th-inner">
+                <button type="button" class="th-sort sortable" data-sort="lastFound">Last found <span class="sort-icon"></span></button>
+                <button type="button" class="col-filter-btn" data-filter="lastFound" aria-label="Filter Last found"><span class="filter-chevron">▾</span></button>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="sh-tbody">
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <p>Loading servers…</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="sh-table-meta" class="table-meta">0 servers</span>
+      <div class="pagination">
+        <button type="button" id="sh-prev" class="page-btn" disabled>← Previous</button>
+        <span id="sh-page-info" class="page-info">Page 1 of 1</span>
+        <button type="button" id="sh-next" class="page-btn" disabled>Next →</button>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+{% block after_main %}
+<div id="tip" class="sh-tip" role="tooltip"></div>
+<div id="scrim" class="sh-scrim"></div>
+<aside id="drawer" class="sh-drawer" aria-hidden="true" aria-label="Server details">
+  <div class="sh-dtop"><span>Server details</span><button type="button" class="sh-x" id="dclose" aria-label="Close details">&times;</button></div>
+  <div class="sh-dbody" id="dbody"></div>
+</aside>
+
+<div id="col-filter-menu" class="col-filter-menu hidden" role="dialog" aria-hidden="true">
+  <div class="col-filter-menu-head">
+    <strong id="col-filter-title">Filter</strong>
+    <button type="button" id="col-filter-close" class="col-filter-close" aria-label="Close">×</button>
+  </div>
+  <div id="col-filter-body" class="col-filter-body"></div>
+  <div class="col-filter-actions">
+    <button type="button" id="col-filter-clear" class="btn btn-outline btn-sm">Clear</button>
+    <button type="button" id="col-filter-apply" class="btn btn-primary btn-sm">Apply</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/server_health.js?v=6"></script>
+{% endblock %}

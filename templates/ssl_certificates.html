@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}SSL Certificates · Tenable{% endblock %}
+{% block brand_icon %}
+          <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+          {% endblock %}
+{% block page_heading %}SSL Certificate Health{% endblock %}
+{% block page_subtitle %}Vulnerability Management · Plugin 10863{% endblock %}
+{% block header_actions %}
+        <button id="refresh-btn" class="btn btn-ghost">
+          <svg id="refresh-icon" class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span id="refresh-label">Refresh</span>
+        </button>
+        {% endblock %}
+{% block main_class %} ssl-page{% endblock %}
+{% block content %}
+<div id="error-banner" class="alert alert-error hidden">
+    <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+      <p class="alert-title">Failed to load SSL certificates</p>
+      <p id="error-message" class="alert-text"></p>
+    </div>
+  </div>
+
+  <div id="loading-banner" class="alert alert-loading hidden">
+    <svg class="alert-icon spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    <div>
+      <p class="alert-title">Syncing with Tenable</p>
+      <p id="loading-message" class="alert-text">Fetching plugin 10863 certificates…</p>
+    </div>
+  </div>
+
+  <div class="kpi-grid ssl-kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-total">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Total Certificates</p>
+        <p id="kpi-total" class="kpi-value accent">—</p>
+        <p class="kpi-meta">Across monitored assets</p>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-valid">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Valid</p>
+        <p id="kpi-valid" class="kpi-value teal">—</p>
+        <p id="kpi-valid-meta" class="kpi-meta">—</p>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-exp30">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Expiring ≤ 30 Days</p>
+        <p id="kpi-exp30" class="kpi-value amber">—</p>
+        <p class="kpi-meta">Requires planned action</p>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-exp7">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Expiring ≤ 7 Days</p>
+        <p id="kpi-exp7" class="kpi-value amber">—</p>
+        <p class="kpi-meta">Immediate attention</p>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-expired">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Expired</p>
+        <p id="kpi-expired" class="kpi-value red">—</p>
+        <p class="kpi-meta">Certificates already expired</p>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon ssl-internet">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+      </div>
+      <div>
+        <p class="kpi-label">Internet-Facing</p>
+        <p id="kpi-internet" class="kpi-value blue">—</p>
+        <p class="kpi-meta">Nessus Scan source</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="ssl-grid2">
+    <div class="ssl-card">
+      <div class="ssl-card-head">
+        <div>
+          <div class="ssl-card-title">Certificate Health</div>
+          <div class="ssl-card-sub">Current status of certificates discovered by Plugin 10863</div>
+        </div>
+        <div class="ssl-legend">
+          <span><i style="background:#0d9488"></i>Valid</span>
+          <span><i style="background:#d97706"></i>Expiring</span>
+          <span><i style="background:#dc2626"></i>Expired</span>
+        </div>
+      </div>
+      <div class="ssl-card-body" id="ssl-health-bars">
+        <button type="button" class="ssl-bar-row" data-health-filter="valid"
+          aria-pressed="false" title="Filter table to Valid certificates">
+          <div class="ssl-bar-label">Valid</div>
+          <div class="ssl-track"><div id="bar-valid" class="ssl-bar valid" style="width:0%"></div></div>
+          <div id="bar-valid-count" class="ssl-bar-count">0</div>
+        </button>
+        <button type="button" class="ssl-bar-row" data-health-filter="expiring"
+          aria-pressed="false" title="Filter table to Expiring certificates">
+          <div class="ssl-bar-label">Expiring</div>
+          <div class="ssl-track"><div id="bar-expiring" class="ssl-bar expiring" style="width:0%"></div></div>
+          <div id="bar-expiring-count" class="ssl-bar-count">0</div>
+        </button>
+        <button type="button" class="ssl-bar-row" data-health-filter="expired"
+          aria-pressed="false" title="Filter table to Expired certificates">
+          <div class="ssl-bar-label">Expired</div>
+          <div class="ssl-track"><div id="bar-expired" class="ssl-bar expired" style="width:0%"></div></div>
+          <div id="bar-expired-count" class="ssl-bar-count">0</div>
+        </button>
+      </div>
+    </div>
+
+    <div class="ssl-card">
+      <div class="ssl-card-head">
+        <div>
+          <div class="ssl-card-title">Internet Exposure</div>
+          <div class="ssl-card-sub">Certificates on assets with Nessus Scan source</div>
+        </div>
+      </div>
+      <div class="ssl-card-body ssl-exposure">
+        <div class="ssl-donut-wrap">
+          <div id="ssl-donut" class="ssl-donut">
+            <div class="ssl-donut-center">
+              <div id="donut-number" class="ssl-donut-number">0</div>
+              <div class="ssl-donut-label">Internet-facing</div>
+            </div>
+          </div>
+        </div>
+        <div class="ssl-exposure-list">
+          <div class="ssl-exposure-item">
+            <div class="ssl-exposure-left"><i class="ssl-swatch" style="background:#0d9488"></i>Valid</div>
+            <div id="exp-valid" class="ssl-exposure-num">0</div>
+          </div>
+          <div class="ssl-exposure-item">
+            <div class="ssl-exposure-left"><i class="ssl-swatch" style="background:#d97706"></i>Expiring</div>
+            <div id="exp-expiring" class="ssl-exposure-num">0</div>
+          </div>
+          <div class="ssl-exposure-item">
+            <div class="ssl-exposure-left"><i class="ssl-swatch" style="background:#dc2626"></i>Expired</div>
+            <div id="exp-expired" class="ssl-exposure-num">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ssl-card ssl-timeline-card">
+    <div class="ssl-card-head">
+      <div>
+        <div class="ssl-card-title">Expiration Timeline</div>
+        <div class="ssl-card-sub">Upcoming certificate renewal workload</div>
+      </div>
+    </div>
+    <div class="ssl-card-body ssl-timeline">
+      <div class="ssl-timeline-scale">
+        <span>Expired</span>
+        <span>≤ 7 days</span>
+        <span>≤ 30 days</span>
+        <span>≤ 90 days</span>
+        <span>90+ days</span>
+      </div>
+      <div class="ssl-timeline-line"></div>
+      <div class="ssl-timeline-items">
+        <div class="ssl-time-box">
+          <div class="ssl-time-title">Expired</div>
+          <div id="tl-expired" class="ssl-time-num">0</div>
+        </div>
+        <div class="ssl-time-box">
+          <div class="ssl-time-title">Next 7 days</div>
+          <div id="tl-7" class="ssl-time-num">0</div>
+        </div>
+        <div class="ssl-time-box">
+          <div class="ssl-time-title">8–30 days</div>
+          <div id="tl-30" class="ssl-time-num">0</div>
+        </div>
+        <div class="ssl-time-box">
+          <div class="ssl-time-title">31–90 days</div>
+          <div id="tl-90" class="ssl-time-num">0</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ssl-card ssl-action-card">
+    <div class="ssl-card-head">
+      <div>
+        <div class="ssl-card-title">Action Required</div>
+        <div class="ssl-card-sub">Certificates prioritised by expiration and external exposure</div>
+      </div>
+      <div class="ssl-filters" id="ssl-filters">
+        <button type="button" class="ssl-filter active" data-filter="all">All</button>
+        <button type="button" class="ssl-filter" data-filter="expired">Expired</button>
+        <button type="button" class="ssl-filter" data-filter="7">≤7 Days</button>
+        <button type="button" class="ssl-filter" data-filter="30">≤30 Days</button>
+        <button type="button" class="ssl-filter" data-filter="internet">Internet-facing</button>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table ssl-table">
+        <thead>
+          <tr>
+            <th>Asset Name</th>
+            <th>IP Address</th>
+            <th>Source</th>
+            <th>Expiry Date</th>
+          </tr>
+        </thead>
+        <tbody id="ssl-tbody">
+          <tr>
+            <td colspan="4">
+              <div class="empty-state">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                <p>Loading SSL certificates from Tenable…</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span id="table-count" class="table-meta">0 certificates</span>
+      <div class="pagination">
+        <button id="prev-page" class="page-btn" disabled>← Previous</button>
+        <span id="page-info" class="page-info">Page 1 of 1</span>
+        <button id="next-page" class="page-btn" disabled>Next →</button>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+{% block after_main %}
+<div id="ssl-drawer-backdrop" class="ssl-drawer-backdrop"></div>
+<aside id="ssl-drawer" class="ssl-drawer" aria-hidden="true">
+  <div class="ssl-drawer-head">
+    <div>
+      <div class="ssl-drawer-eyebrow">Certificate detail</div>
+      <h2 id="drawer-asset">—</h2>
+    </div>
+    <button type="button" id="drawer-close" class="ssl-drawer-close" aria-label="Close">×</button>
+  </div>
+  <div class="ssl-drawer-body">
+    <div class="ssl-detail-section">
+      <span id="drawer-status" class="ssl-pill">—</span>
+    </div>
+    <div class="ssl-detail-section">
+      <div class="ssl-detail-title">Certificate</div>
+      <div class="ssl-detail-row"><span>Subject</span><span id="drawer-subject">—</span></div>
+      <div class="ssl-detail-row"><span>Issuer</span><span id="drawer-issuer">—</span></div>
+      <div class="ssl-detail-row"><span>Valid from</span><span id="drawer-from">—</span></div>
+      <div class="ssl-detail-row"><span>Valid until</span><span id="drawer-to">—</span></div>
+    </div>
+    <div class="ssl-detail-section">
+      <div class="ssl-detail-title">Asset</div>
+      <div class="ssl-detail-row"><span>IP address</span><span id="drawer-ip">—</span></div>
+      <div class="ssl-detail-row"><span>Port</span><span id="drawer-port">—</span></div>
+      <div class="ssl-detail-row"><span>Source</span><span id="drawer-source">—</span></div>
+      <div class="ssl-detail-row"><span>Exposure</span><span id="drawer-exposure">—</span></div>
+    </div>
+    <div class="ssl-detail-section">
+      <div class="ssl-detail-title">Tenable</div>
+      <div class="ssl-detail-row"><span>Plugin</span><span>10863</span></div>
+      <div class="ssl-detail-row"><span>First seen</span><span id="drawer-first">—</span></div>
+      <div class="ssl-detail-row"><span>Last seen</span><span id="drawer-last">—</span></div>
+    </div>
+  </div>
+</aside>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/ssl_certificates.js?v=5"></script>
+{% endblock %}

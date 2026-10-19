@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Tenable{% endblock %}
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% endblock %}
+{% block body_class %}lumin-page{% endblock %}
+{% block brand_icon %}
+          <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M14 7h7v7"/>
+          </svg>
+          {% endblock %}
+{% block page_heading %}Dashboard{% endblock %}
+{% block page_subtitle %}Frozen monthly remediation flow · Tenable state &amp; date definitions{% endblock %}
+{% block sync_status %}
+            <span id="last-updated">Last updated: —</span>
+            {% endblock %}
+{% block header_actions %}
+        <button id="sync-daily-btn" class="btn btn-ghost" title="Incremental export + complete open-set refresh (recast / VPR / expiry), then close months">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span class="refresh-label">Daily sync</span>
+        </button>
+        <button id="sync-full-btn" class="btn btn-ghost" title="Full export since epoch (all states)">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          <span class="refresh-label">Full sync</span>
+        </button>
+        <button id="refresh-dashboard-btn" class="btn btn-ghost" title="Reload metrics from local store">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span class="refresh-label">Refresh</span>
+        </button>
+        <button id="export-report-btn" class="btn btn-primary">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Export Report
+        </button>
+        {% endblock %}
+{% block content %}
+<div id="dashboard-error" class="alert alert-error hidden">
+    <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+      <p class="alert-title">Unable to load dashboard</p>
+      <p id="dashboard-error-message" class="alert-text"></p>
+    </div>
+  </div>
+
+  <div id="dashboard-loading" class="alert alert-loading hidden">
+    <svg class="alert-icon spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+    </svg>
+    <div>
+      <p class="alert-title">Loading Lumin Index</p>
+      <p class="alert-text">Reading frozen monthly snapshots and finding history…</p>
+    </div>
+  </div>
+
+  <div id="sync-panel" class="sync-panel hidden">
+    <div class="sync-panel-head">
+      <svg class="alert-icon spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      <div>
+        <p class="alert-title" id="sync-panel-title">Synchronizing vulnerabilities</p>
+        <p class="alert-text" id="sync-panel-message">Connecting to Tenable export API…</p>
+      </div>
+      <span id="sync-progress-pct" class="sync-progress-pct">0%</span>
+    </div>
+    <div class="sync-progress-track">
+      <div id="sync-progress-bar" class="sync-progress-bar" style="width: 0%"></div>
+    </div>
+    <div class="sync-phase-steps">
+      <span class="sync-phase" data-phase="requesting">Request</span>
+      <span class="sync-phase" data-phase="polling">Polling</span>
+      <span class="sync-phase" data-phase="downloading">Download</span>
+      <span class="sync-phase" data-phase="importing">Import</span>
+      <span class="sync-phase" data-phase="complete">Complete</span>
+    </div>
+    <p class="sync-meta" id="sync-meta">—</p>
+  </div>
+
+  <div id="dashboard-empty" class="alert alert-loading hidden">
+    <svg class="alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+      <p class="alert-title">No vulnerability data yet</p>
+      <p class="alert-text">Click <strong>Full sync</strong> to import findings. The first full export can take several minutes.</p>
+    </div>
+  </div>
+
+  <div id="dashboard-content" class="hidden">
+
+    <section class="dashboard-hero">
+      <div class="dashboard-hero-main">
+        <h2>Remediation Performance</h2>
+        <p id="dashboard-scope-hint" class="dashboard-hero-hint">Closed months are frozen · current month shown separately as provisional</p>
+      </div>
+      <div class="dashboard-hero-controls">
+        <label class="dashboard-tag-filter" for="dashboard-tag-select">
+          <span class="dashboard-tag-filter-label">Asset tag</span>
+          <select id="dashboard-tag-select" class="filter-select dashboard-tag-select">
+            <option value="">All assets</option>
+          </select>
+        </label>
+        <span id="report-generated" class="dashboard-hero-ts">—</span>
+      </div>
+      <div id="dashboard-refresh-bar" class="dashboard-refresh-bar hidden" aria-hidden="true">
+        <div class="dashboard-refresh-bar-fill"></div>
+      </div>
+    </section>
+
+    <div id="dashboard-metrics-panel" class="dashboard-metrics-panel">
+      <div id="dashboard-metrics-overlay" class="dashboard-metrics-overlay hidden" aria-live="polite" aria-busy="false">
+        <div class="dashboard-metrics-overlay-card">
+          <svg class="dashboard-metrics-spinner spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <p id="dashboard-refresh-message" class="dashboard-refresh-message">Updating metrics…</p>
+        </div>
+      </div>
+
+      <!-- 1. Where are we now -->
+      <p class="lumin-section-title">1 · Where we are now</p>
+      <section class="exec-kpi-grid vm-kpi-grid">
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">Active Findings</p>
+          <p class="exec-kpi-value accent" id="kpi-active">—</p>
+          <p class="exec-kpi-delta" id="kpi-active-delta">vs last month end: —</p>
+        </div>
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">Critical + High (VPR ≥ 7)</p>
+          <p class="exec-kpi-value critical" id="kpi-crit-high">—</p>
+          <p class="exec-kpi-delta" id="kpi-crit-high-split">Critical — · High —</p>
+        </div>
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">SLA Breach — Critical</p>
+          <p class="exec-kpi-value critical" id="kpi-sla-critical">—</p>
+          <p class="exec-kpi-delta">VPR 9–10 · &gt;14 days from SLA date</p>
+        </div>
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">SLA Breach — High</p>
+          <p class="exec-kpi-value warning" id="kpi-sla-high">—</p>
+          <p class="exec-kpi-delta">VPR 7–8.9 · &gt;30 days from SLA date</p>
+        </div>
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">Resurfaced (active)</p>
+          <p class="exec-kpi-value elevated" id="kpi-resurfaced">—</p>
+          <p class="exec-kpi-delta">State REOPENED</p>
+        </div>
+        <div class="exec-kpi">
+          <p class="exec-kpi-label">Weaponized exploit</p>
+          <p class="exec-kpi-value elevated" id="kpi-weaponized">—</p>
+          <p class="exec-kpi-delta">Exploit Maturity Functional / High</p>
+        </div>
+      </section>
+
+      <!-- 2. Are we keeping up -->
+      <p class="lumin-section-title">2 · Are we keeping up — last 6 closed months</p>
+      <section class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Backlog at Month Start &amp; End</h3>
+            <p>Observed active findings on the 1st — frozen once the month closes</p>
+          </div>
+          <div class="chart-body chart-canvas-wrap">
+            <canvas id="backlog-chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Latest Closed Month — Waterfall</h3>
+            <p id="waterfall-hint">—</p>
+          </div>
+          <div class="chart-body chart-canvas-wrap">
+            <canvas id="waterfall-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. How fast -->
+      <p class="lumin-section-title">3 · How fast — remediation responsiveness</p>
+      <section class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>Median Days to Fix</h3>
+            <p>Tenable time_taken_to_fix · Critical/High vs Medium/Low</p>
+          </div>
+          <div class="chart-body chart-canvas-wrap">
+            <canvas id="mttr-chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <h3>SLA Attainment — Critical/High</h3>
+            <p>Fixed within 14 d (Critical) / 30 d (High) ÷ Critical/High fixed</p>
+          </div>
+          <div class="chart-body chart-canvas-wrap">
+            <canvas id="sla-chart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="chart-grid lumin-fix-extremes-grid">
+        <div class="chart-card">
+          <div class="chart-card-header lumin-card-header">
+            <div>
+              <h3>Resolved before month median</h3>
+              <p id="fix-before-hint">Plugin median &lt; month median · Critical/High</p>
+            </div>
+            <span class="lumin-badge lumin-badge-good" id="fix-before-count">0</span>
+          </div>
+          <div class="table-wrap lumin-fix-plugin-scroll">
+            <table class="data-table data-table-compact">
+              <thead>
+                <tr>
+                  <th>Plugin</th>
+                  <th>Plugin ID</th>
+                  <th>Fixed</th>
+                  <th>Hosts</th>
+                  <th>Median</th>
+                </tr>
+              </thead>
+              <tbody id="fix-before-body">
+                <tr><td colspan="5" class="cell-time">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header lumin-card-header">
+            <div>
+              <h3>Resolved after month median</h3>
+              <p id="fix-after-hint">Plugin median &gt; month median · Critical/High</p>
+            </div>
+            <span class="lumin-badge lumin-badge-bad" id="fix-after-count">0</span>
+          </div>
+          <div class="table-wrap lumin-fix-plugin-scroll">
+            <table class="data-table data-table-compact">
+              <thead>
+                <tr>
+                  <th>Plugin</th>
+                  <th>Plugin ID</th>
+                  <th>Fixed</th>
+                  <th>Hosts</th>
+                  <th>Median</th>
+                </tr>
+              </thead>
+              <tbody id="fix-after-body">
+                <tr><td colspan="5" class="cell-time">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Month to date -->
+      <p class="lumin-section-title">4 · Current month — provisional</p>
+      <section class="chart-grid">
+        <div class="chart-card chart-span-2 lumin-mtd-card">
+          <div class="chart-card-header lumin-card-header">
+            <div>
+              <h3 id="mtd-title">Month to date</h3>
+              <p id="mtd-hint">Numbers change daily until the month closes. Backlog start is frozen.</p>
+            </div>
+            <span class="lumin-badge lumin-badge-provisional">Provisional</span>
+          </div>
+          <div class="lumin-mtd-grid">
+            <div><p class="exec-kpi-label">Backlog start</p><p class="lumin-mtd-value" id="mtd-start">—</p><p class="exec-kpi-delta" id="mtd-start-method">—</p></div>
+            <div><p class="exec-kpi-label">New so far</p><p class="lumin-mtd-value" id="mtd-new">—</p></div>
+            <div><p class="exec-kpi-label">Resurfaced so far</p><p class="lumin-mtd-value" id="mtd-res">—</p></div>
+            <div><p class="exec-kpi-label">Fixed so far</p><p class="lumin-mtd-value good" id="mtd-fixed">—</p></div>
+            <div><p class="exec-kpi-label">Active now</p><p class="lumin-mtd-value accent" id="mtd-active">—</p></div>
+            <div><p class="exec-kpi-label">Coverage so far</p><p class="lumin-mtd-value" id="mtd-coverage">—</p></div>
+            <div><p class="exec-kpi-label">Median days to fix (C/H)</p><p class="lumin-mtd-value" id="mtd-mttr">—</p></div>
+            <div><p class="exec-kpi-label">SLA attainment (C/H)</p><p class="lumin-mtd-value" id="mtd-sla">—</p></div>
+          </div>
+          <div class="lumin-mtd-new-block">
+            <div class="chart-card-header lumin-card-header lumin-mtd-new-header">
+              <div>
+                <h3>New so far — vulnerability list</h3>
+                <p id="mtd-new-hint">First Seen this month · Risk Modified = NONE · VPR ≥ 0.1</p>
+              </div>
+              <div class="lumin-mtd-new-toolbar">
+                <div class="mtd-groupby" role="group" aria-label="Group findings">
+                  <span class="mtd-groupby-label">
+                    <svg class="mtd-groupby-label-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h14"/>
+                    </svg>
+                    Group
+                  </span>
+                  <div class="mtd-groupby-seg">
+                    <button type="button" class="mtd-groupby-btn is-active" data-mtd-group="none" title="Flat list — no grouping" aria-pressed="true">
+                      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                      </svg>
+                      <span>List</span>
+                    </button>
+                    <button type="button" class="mtd-groupby-btn" data-mtd-group="hostname" title="Group by hostname" aria-pressed="false">
+                      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 20h14M7 20V8a2 2 0 012-2h6a2 2 0 012 2v12M9 12h.01M15 12h.01M9 16h.01M15 16h.01"/>
+                      </svg>
+                      <span>Host</span>
+                    </button>
+                    <button type="button" class="mtd-groupby-btn" data-mtd-group="plugin_id" title="Group by plugin ID" aria-pressed="false">
+                      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                      </svg>
+                      <span>Plugin</span>
+                    </button>
+                  </div>
+                </div>
+                <span class="lumin-badge lumin-badge-provisional" id="mtd-new-count">0 findings</span>
+              </div>
+            </div>
+            <div class="table-wrap table-wrap-wide lumin-mtd-new-scroll">
+              <table id="mtd-new-table" class="data-table data-table-compact lumin-mtd-new-table">
+                <colgroup>
+                  <col class="col-host">
+                  <col class="col-ip">
+                  <col class="col-plugin-id">
+                  <col class="col-plugin-name">
+                  <col class="col-vpr">
+                  <col class="col-tier">
+                  <col class="col-state">
+                  <col class="col-seen">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="col-th" data-col="hostname">
+                      <div class="th-inner">
+                        <span>Hostname</span>
+                        <button type="button" class="col-filter-btn" data-filter="hostname" aria-label="Filter Hostname"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="ipv4">
+                      <div class="th-inner">
+                        <span>IP</span>
+                        <button type="button" class="col-filter-btn" data-filter="ipv4" aria-label="Filter IP"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="plugin_id">
+                      <div class="th-inner">
+                        <span>Plugin ID</span>
+                        <button type="button" class="col-filter-btn" data-filter="plugin_id" aria-label="Filter Plugin ID"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="plugin_name">
+                      <div class="th-inner">
+                        <span>Plugin Name</span>
+                        <button type="button" class="col-filter-btn" data-filter="plugin_name" aria-label="Filter Plugin Name"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="vpr_score">
+                      <div class="th-inner">
+                        <span>VPR</span>
+                        <button type="button" class="col-filter-btn" data-filter="vpr_score" aria-label="Filter VPR"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="vpr_tier">
+                      <div class="th-inner">
+                        <span>Tier</span>
+                        <button type="button" class="col-filter-btn" data-filter="vpr_tier" aria-label="Filter Tier"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="state">
+                      <div class="th-inner">
+                        <span>State</span>
+                        <button type="button" class="col-filter-btn" data-filter="state" aria-label="Filter State"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                    <th class="col-th" data-col="first_found">
+                      <div class="th-inner">
+                        <span>First Seen</span>
+                        <button type="button" class="col-filter-btn" data-filter="first_found" aria-label="Filter First Seen"><span class="filter-chevron">▾</span></button>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="mtd-new-table-body"></tbody>
+              </table>
+            </div>
+            <div class="table-footer lumin-mtd-new-footer">
+              <div class="page-size-wrap">
+                <span>Rows per page</span>
+                <select id="mtd-new-page-size">
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="pagination">
+                <button type="button" id="mtd-new-prev" class="page-btn" disabled>← Previous</button>
+                <span id="mtd-new-page-info" class="page-info">Page 1 of 1</span>
+                <button type="button" id="mtd-new-next" class="page-btn" disabled>Next →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Table -->
+      <p class="lumin-section-title">5 · Monthly Patch Performance — closed months only</p>
+      <section class="chart-grid">
+        <div class="chart-card chart-span-2">
+          <div class="chart-card-header lumin-card-header">
+            <div>
+              <h3>Six closed months</h3>
+              <p>Each row is locked when the month closes and never recomputes. End = observed active on the next 1st.</p>
+            </div>
+            <span class="lumin-legend">
+              <span class="lumin-badge method-frozen">frozen</span> from history
+              <span class="lumin-badge method-reconstructed">reconstructed</span> from timestamps
+              <span class="lumin-badge method-live">live</span> tag scope
+            </span>
+          </div>
+          <div class="table-wrap table-wrap-wide">
+            <table class="data-table data-table-compact">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Start</th>
+                  <th>New</th>
+                  <th>Resurfaced</th>
+                  <th>Fixed</th>
+                  <th>End</th>
+                  <th>Net</th>
+                  <th>Resolved %</th>
+                  <th>Backlog cleared %</th>
+                  <th>Median days C/H</th>
+                  <th>Median days M/L</th>
+                  <th>SLA %</th>
+                  <th>Method</th>
+                </tr>
+              </thead>
+              <tbody id="patch-table-body"></tbody>
+            </table>
+          </div>
+          <p class="lumin-footnote" id="flow-gap-note"></p>
+        </div>
+      </section>
+
+      <!-- 6. Where the risk sits -->
+      <p class="lumin-section-title">6 · Where the risk sits</p>
+      <section class="chart-grid">
+        <div class="chart-card chart-span-2">
+          <div class="chart-card-header">
+            <h3>Top Risky Assets (VPR)</h3>
+            <p id="top-assets-hint">Highest combined VPR exposure — active findings by VPR tier</p>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rank</th><th>Hostname</th><th>IP</th>
+                  <th>Critical</th><th>High</th><th>Medium</th><th>Low</th>
+                  <th>Top VPR</th><th>Active</th>
+                </tr>
+              </thead>
+              <tbody id="assets-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="chart-grid">
+        <div class="chart-card chart-span-2">
+          <div class="chart-card-header">
+            <h3>Recast &amp; Accept Risk (by Plugin)</h3>
+            <p id="recast-accept-hint">Active findings with accepted or recasted risk — excluded from all counts above</p>
+          </div>
+          <div class="table-wrap table-wrap-wide table-scroll lumin-recast-scroll">
+            <table class="data-table data-table-compact">
+              <thead>
+                <tr>
+                  <th>Plugin Name</th><th>Plugin ID</th><th>Type</th>
+                  <th>Assets</th><th>Findings</th><th>Created</th><th>Expires</th>
+                </tr>
+              </thead>
+              <tbody id="recast-accept-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /dashboard-metrics-panel -->
+  </div>
+{% endblock %}
+{% block after_main %}
+<div id="col-filter-menu" class="col-filter-menu hidden" role="dialog" aria-hidden="true">
+  <div class="col-filter-menu-head">
+    <strong id="col-filter-title">Filter</strong>
+    <button type="button" id="col-filter-close" class="col-filter-close" aria-label="Close">×</button>
+  </div>
+  <div id="col-filter-body" class="col-filter-body"></div>
+  <div class="col-filter-actions">
+    <button type="button" id="col-filter-clear" class="btn btn-outline btn-sm">Clear</button>
+    <button type="button" id="col-filter-apply" class="btn btn-primary btn-sm">Apply</button>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/lumin.js?v=20"></script>
+{% endblock %}

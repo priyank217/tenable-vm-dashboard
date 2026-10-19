@@ -1,0 +1,17 @@
+data/
+data/vuln_raw/
+data/vuln_exports/
+__pycache__/
+*.py[cod]
+*.db
+*.db-wal
+*.db-shm
+.env
+.venv/
+venv/
+.idea/
+.vscode/
+*.log
+tenable/
+tenable/**
+*.md
